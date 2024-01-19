@@ -1,13 +1,16 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 
 contract GHOStakingVault is ERC4626 {
+    ERC20 public immutable GHO;
+
     struct Game {
         uint id;
+        string gameName;
         uint totalPrice;
         uint numberOfPlayer;
         uint[] repartition;
@@ -16,7 +19,6 @@ contract GHOStakingVault is ERC4626 {
         bool finished;
     }
 
-    ERC20 public immutable GHO;
     Game[] public games;
     address public superAdmin;
 
@@ -25,19 +27,20 @@ contract GHOStakingVault is ERC4626 {
     event GameStarted(uint gameId);
     event ParticipantEnteredGame(uint gameId, address participant);
 
-    error notParticipant(address user);
-    error notEnoughFGHO(uint amountRequire);
+    error NotEnoughFGHO(uint amountRequire);
     error IncorrectId(uint gameId);
-    error notStartedGame(uint gameId);
-    error inProgressGame(uint gameId);
-    error isOverGame(uint gameId);
+    error NotStartedGame(uint gameId);
+    error InProgressGame(uint gameId);
+    error IsOverGame(uint gameId);
     error IncorrectRepartition();
-    error notSuperAdmin(address caller, address superAdmin);
-    error incorrectRanking(uint sendLength, uint wantedLength);
+    error NotSuperAdmin(address caller, address superAdmin);
+    error NoApproval();
+    error IncorrectRanking(uint sendLength, uint wantedLength);
+    error AlreadyPlaying(address userAddress);
 
     modifier onlySuperAdmin() {
         if (msg.sender != superAdmin) {
-            revert notSuperAdmin(msg.sender, superAdmin);
+            revert NotSuperAdmin(msg.sender, superAdmin);
         }
         _;
     }
@@ -51,17 +54,43 @@ contract GHOStakingVault is ERC4626 {
         GHO = _GHO;
     }
 
+    function getGame(
+        uint gameId
+    )
+        public
+        view
+        returns (
+            uint,
+            string memory,
+            uint,
+            uint,
+            uint[] memory,
+            address[] memory,
+            bool,
+            bool
+        )
+    {
+        Game memory currentGame = games[gameId];
+        return (
+            currentGame.id,
+            currentGame.gameName,
+            currentGame.totalPrice,
+            currentGame.numberOfPlayer,
+            currentGame.repartition,
+            currentGame.participants,
+            currentGame.started,
+            currentGame.finished
+        );
+    }
+
     function createGame(
+        string memory gameName,
         uint totalPrice,
-        uint[] memory repartition,
-        uint numberOfPlayer
+        uint[] memory repartition
     ) public {
         uint gameId = games.length;
         address[] memory emptyArray;
         uint totalPercentages = 0;
-        if (repartition.length != numberOfPlayer) {
-            revert IncorrectRepartition();
-        }
         for (uint i = 0; i < repartition.length; i++) {
             if (repartition[i] < 0) {
                 revert IncorrectRepartition();
@@ -74,8 +103,9 @@ contract GHOStakingVault is ERC4626 {
         games.push(
             Game(
                 gameId,
+                gameName,
                 totalPrice,
-                numberOfPlayer,
+                repartition.length,
                 repartition,
                 emptyArray,
                 false,
@@ -93,16 +123,25 @@ contract GHOStakingVault is ERC4626 {
         Game memory currentGame = games[gameId];
 
         if (currentGame.started) {
-            revert inProgressGame(gameId);
+            revert InProgressGame(gameId);
         }
         if (currentGame.finished) {
-            revert isOverGame(gameId);
+            revert IsOverGame(gameId);
+        }
+        for (uint i = 0; i < currentGame.participants.length; i++) {
+            if (msg.sender == currentGame.participants[i]) {
+                revert AlreadyPlaying(msg.sender);
+            }
         }
         uint minimumAmount = (currentGame.totalPrice /
             currentGame.numberOfPlayer);
-        if (!this.transferFrom(msg.sender, address(this), minimumAmount)) {
-            revert notEnoughFGHO(minimumAmount);
+        if (!approve(address(this), minimumAmount)) {
+            revert NoApproval();
         }
+        if (!this.transferFrom(msg.sender, address(this), minimumAmount)) {
+            revert NotEnoughFGHO(minimumAmount);
+        }
+
         games[gameId].participants.push(msg.sender);
         emit ParticipantEnteredGame(gameId, msg.sender);
 
@@ -118,10 +157,10 @@ contract GHOStakingVault is ERC4626 {
     ) public onlySuperAdmin {
         Game memory currentGame = games[gameId];
         if (!currentGame.started) {
-            revert notStartedGame(gameId);
+            revert NotStartedGame(gameId);
         }
         if (currentGame.numberOfPlayer != ranking.length) {
-            revert incorrectRanking(ranking.length, currentGame.numberOfPlayer);
+            revert IncorrectRanking(ranking.length, currentGame.numberOfPlayer);
         }
         for (uint i = 0; i < ranking.length; i++) {
             this.transfer(
