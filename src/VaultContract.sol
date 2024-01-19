@@ -20,7 +20,7 @@ contract GHOStakingVault is ERC4626 {
         uint id;
         string gameName;
         uint totalPrice;
-        uint numberOfPlayer;
+        uint numberOfPlayers;
         uint[] repartition;
         address[] participants;
         bool started;
@@ -74,10 +74,14 @@ contract GHOStakingVault is ERC4626 {
         GHO = _GHO;
     }
 
+    function getNumberGames() public view returns (uint number) {
+        return games.length;
+    }
+
     /**
      * @notice Fetches details of a specific game.
      * @param gameId The ID of the game to retrieve.
-     * @return Tuple containing game details.
+     * @return id and a Tuple containing game details.
      */
     function getGame(
         uint gameId
@@ -85,14 +89,14 @@ contract GHOStakingVault is ERC4626 {
         public
         view
         returns (
-            uint,
-            string memory,
-            uint,
-            uint,
-            uint[] memory,
-            address[] memory,
-            bool,
-            bool
+            uint id,
+            string memory gameName,
+            uint totalPrice,
+            uint numberOfPlayers,
+            uint[] memory repartition,
+            address[] memory participants,
+            bool started,
+            bool finished
         )
     {
         Game memory currentGame = games[gameId];
@@ -100,7 +104,7 @@ contract GHOStakingVault is ERC4626 {
             currentGame.id,
             currentGame.gameName,
             currentGame.totalPrice,
-            currentGame.numberOfPlayer,
+            currentGame.numberOfPlayers,
             currentGame.repartition,
             currentGame.participants,
             currentGame.started,
@@ -171,7 +175,7 @@ contract GHOStakingVault is ERC4626 {
             }
         }
         uint minimumAmount = (currentGame.totalPrice /
-            currentGame.numberOfPlayer);
+            currentGame.numberOfPlayers);
         if (!approve(address(this), minimumAmount)) {
             revert NoApproval();
         }
@@ -182,7 +186,7 @@ contract GHOStakingVault is ERC4626 {
         games[gameId].participants.push(msg.sender);
         emit ParticipantEnteredGame(gameId, msg.sender);
 
-        if (games[gameId].participants.length == currentGame.numberOfPlayer) {
+        if (games[gameId].participants.length == currentGame.numberOfPlayers) {
             games[gameId].started = true;
             emit GameStarted(gameId);
         }
@@ -202,8 +206,11 @@ contract GHOStakingVault is ERC4626 {
         if (currentGame.finished) {
             revert IsOverGame(gameId);
         }
-        if (currentGame.numberOfPlayer != ranking.length) {
-            revert IncorrectRanking(ranking.length, currentGame.numberOfPlayer);
+        if (currentGame.numberOfPlayers != ranking.length) {
+            revert IncorrectRanking(
+                ranking.length,
+                currentGame.numberOfPlayers
+            );
         }
         for (uint i = 0; i < ranking.length; i++) {
             this.transfer(
