@@ -13,8 +13,8 @@ contract DeploymentScript is Script {
         ERC20 ghoTokenAddress = ERC20(
             0xc4bF5CbDaBE595361438F8c6a187bDc330539c60
         );
-        string memory vaultTokenName = "Vault-Gho";
-        string memory vaultTokenSymbol = "F-GHO";
+        string memory vaultTokenName = "Raclette-Gho";
+        string memory vaultTokenSymbol = "R-GHO";
 
         new GHOStakingVault(ghoTokenAddress, vaultTokenName, vaultTokenSymbol);
 
